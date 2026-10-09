@@ -7,7 +7,7 @@ import 'form_screen.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  static const _dark = Color.fromARGB(255, 34, 0, 255);
+  static const _dark = Color.fromARGB(255, 0, 0, 255);
 
   // กล่องยืนยันก่อนออกจากระบบ
   void _confirmLogout(BuildContext context, AuthController auth) {
@@ -58,22 +58,9 @@ class HomeScreen extends StatelessWidget {
             appBar: AppBar(
               backgroundColor: _dark,
               foregroundColor: Colors.white,
-              title: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('EnviroSense ($role)',
-                      style: const TextStyle(
-                          fontSize: 19, fontWeight: FontWeight.bold)),
-                  Text(user.email ?? '',
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.white70)),
-                  // แสดง UID ชั่วคราว ไว้เทียบกับ Document ID ใน Firestore
-                  // (ลบบรรทัดนี้ทิ้งได้เมื่อแก้ปัญหาสิทธิ์เสร็จแล้ว)
-                  Text('UID: ${user.uid}',
-                      style: const TextStyle(
-                          fontSize: 9, color: Colors.white54)),
-                ],
-              ),
+              title: Text('EnviroSense ($role)',
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold)),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.logout),

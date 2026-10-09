@@ -2,13 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../controllers/station_controller.dart';
 import '../models/station_model.dart';
-import 'edit_screen.dart';
 
 class DisplayScreen extends StatelessWidget {
   final bool isAdmin;
   const DisplayScreen({super.key, required this.isAdmin});
 
-  static const _dark = Color.fromARGB(255, 34, 0, 255);
+  static const _dark = Color.fromARGB(255, 0, 110, 255);
 
   Color _aqiColor(int a) {
     if (a <= 50) return const Color(0xFF2E9E4F);
@@ -28,73 +27,151 @@ class DisplayScreen extends StatelessWidget {
     return 'อันตราย';
   }
 
-  // ---------- กล่องถามยืนยัน (ใช้ร่วมกันทุกปุ่ม) ----------
-  Future<bool> _ask(
-    BuildContext context, {
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String message,
-    required String confirmLabel,
-  }) async {
-    final ok = await showDialog<bool>(
+  // ---------- Delete + AlertDialog ----------
+  void _confirmDelete(BuildContext context, Station s) {
+    final messenger = ScaffoldMessenger.of(context);
+    showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        icon: Icon(icon, color: color, size: 48),
-        title: Text(title),
-        content: Text(message, textAlign: TextAlign.center),
+        icon: Icon(Icons.warning_amber_rounded,
+            color: Colors.red.shade400, size: 48),
+        title: const Text('ยืนยันการลบ'),
+        content: Text(
+          'ต้องการลบสถานี "${s.stationId}"\n(สถานีที่หยุดซ่อมบำรุงชั่วคราว) ใช่หรือไม่?\n\nการลบไม่สามารถกู้คืนได้',
+          textAlign: TextAlign.center,
+        ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('ยกเลิก'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: color),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(confirmLabel),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade500),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('ลบ'),
+            onPressed: () async {
+              await StationController().delete(s.id!);
+              if (ctx.mounted) Navigator.pop(ctx);
+              messenger.showSnackBar(SnackBar(
+                behavior: SnackBarBehavior.floating,
+                content: Text('ลบสถานี ${s.stationId} แล้ว'),
+              ));
+            },
           ),
         ],
       ),
     );
-    return ok ?? false;
   }
 
-  // ---------- Delete: ถามก่อนลบเสมอ ----------
-  Future<void> _confirmDelete(BuildContext context, Station s) async {
+  // ---------- Edit (Calibrate) ----------
+  void _edit(BuildContext context, Station s) {
+    final aqi = TextEditingController(text: s.aqi.toString());
+    final pm = TextEditingController(text: s.pm25.toString());
+    final key = GlobalKey<FormState>();
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await _ask(
-      context,
-      icon: Icons.warning_amber_rounded,
-      color: Colors.red.shade500,
-      title: 'ยืนยันการลบ',
-      message:
-          'ต้องการลบสถานี "${s.stationId}"\n(สถานีที่หยุดซ่อมบำรุงชั่วคราว) ใช่หรือไม่?\n\nการลบไม่สามารถกู้คืนได้',
-      confirmLabel: 'ลบ',
-    );
-    if (!ok) return;
-    await StationController().delete(s.id!);
-    messenger.showSnackBar(SnackBar(
-      behavior: SnackBarBehavior.floating,
-      content: Text('ลบสถานี ${s.stationId} แล้ว'),
-    ));
-  }
 
-  // ---------- Edit: ถามก่อน แล้วสลับไปหน้า EditScreen ----------
-  Future<void> _confirmEdit(BuildContext context, Station s) async {
-    final ok = await _ask(
-      context,
-      icon: Icons.tune,
-      color: _dark,
-      title: 'ปรับปรุงค่าเซนเซอร์',
-      message: 'ต้องการแก้ไขค่า Calibrate ของสถานี\n"${s.stationId}" ใช่หรือไม่?',
-      confirmLabel: 'แก้ไข',
-    );
-    if (!ok || !context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => EditScreen(station: s)),
+    OutlineInputBorder border([Color c = Colors.grey]) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: c),
+        );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.tune, color: _dark),
+          SizedBox(width: 10),
+          Text('Calibrate เซนเซอร์'),
+        ]),
+        content: Form(
+          key: key,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('${s.stationId}\nโซน: ${s.zone}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: aqi,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'AQI (0-500)',
+                  prefixIcon: const Icon(Icons.speed),
+                  border: border(),
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'กรุณากรอกค่า AQI';
+                  final n = int.tryParse(v.trim());
+                  if (n == null) return 'กรอกเป็นตัวเลขเท่านั้น';
+                  if (n < 0 || n > 500) return 'ต้องอยู่ระหว่าง 0-500';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: pm,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'PM2.5 (µg/m³)',
+                  prefixIcon: const Icon(Icons.grain),
+                  border: border(),
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'กรุณากรอกค่า PM2.5';
+                  if (double.tryParse(v.trim()) == null) {
+                    return 'กรอกเป็นตัวเลขเท่านั้น';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.end,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ยกเลิก'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: _dark),
+            icon: const Icon(Icons.check),
+            label: const Text('บันทึก'),
+            onPressed: () async {
+              if (!key.currentState!.validate()) return;
+              await StationController().update(
+                s.id!,
+                Station(
+                  stationId: s.stationId,
+                  zone: s.zone,
+                  officerEmail: s.officerEmail,
+                  aqi: int.parse(aqi.text.trim()),
+                  pm25: double.parse(pm.text.trim()),
+                ),
+              );
+              if (ctx.mounted) Navigator.pop(ctx);
+              messenger.showSnackBar(SnackBar(
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: _dark,
+                content: Text('ปรับปรุงค่าสถานี ${s.stationId} แล้ว'),
+              ));
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -201,7 +278,7 @@ class DisplayScreen extends StatelessWidget {
                     elevation: 2,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(18),
-                      side: BorderSide(color: color.withOpacity(0.35)),
+                      side: BorderSide(color: color.withValues(alpha: 0.35)),
                     ),
                     child: ListTile(
                       contentPadding:
@@ -236,7 +313,7 @@ class DisplayScreen extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 3),
                             decoration: BoxDecoration(
-                              color: color.withOpacity(0.15),
+                              color: color.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(_aqiLabel(s.aqi),
@@ -259,7 +336,7 @@ class DisplayScreen extends StatelessWidget {
                                   constraints: const BoxConstraints(),
                                   icon: const Icon(Icons.edit,
                                       color: Colors.blue),
-                                  onPressed: () => _confirmEdit(context, s),
+                                  onPressed: () => _edit(context, s),
                                 ),
                                 const SizedBox(width: 4),
                                 IconButton(
